@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# backup.sh - config-driven backup script with CLI options
+# backup.sh - config-driven backup script with dry-run support
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -48,10 +48,13 @@ mkdir -p "$BACKUP_DEST" "$LOG_DIR"
 LOG_FILE="${LOG_DIR}/backup_$(date +%Y-%m-%d).log"
 
 log_info "==== Backup run started ===="
+[[ "$DRY_RUN" == true ]] && log_info "Running in DRY-RUN mode. No changes will be made."
 
 TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
 ARCHIVE_PATH="${BACKUP_DEST}/backup_${TIMESTAMP}.tar.gz"
 
+
+# loop through the sources to confirm their validity and save them in an array
 VALID_SOURCES=()
 for src in "${SOURCE_DIRS[@]}"; do
     if [[ -e "$src" ]]; then
@@ -61,6 +64,7 @@ for src in "${SOURCE_DIRS[@]}"; do
     fi
 done
 
+# 
 if [[ ${#VALID_SOURCES[@]} -eq 0 ]]; then
     log_error "No valid source directories found. Aborting."
     exit 1
@@ -69,12 +73,16 @@ fi
 log_info "Creating archive: $ARCHIVE_PATH"
 log_info "Sources: ${VALID_SOURCES[*]}"
 
-if tar -czf "$ARCHIVE_PATH" "${VALID_SOURCES[@]}" 2>>"$LOG_FILE"; then
-    SIZE=$(du -h "$ARCHIVE_PATH" | cut -f1)
-    log_info "Archive created successfully (${SIZE})"
+if [[ "$DRY_RUN" == true ]]; then
+    log_info "[DRY-RUN] Would run: tar -czf $ARCHIVE_PATH ${VALID_SOURCES[*]}"
 else
-    log_error "tar command failed. See $LOG_FILE for details."
-    exit 1
+    if tar -czf "$ARCHIVE_PATH" "${VALID_SOURCES[@]}" 2>>"$LOG_FILE"; then
+        SIZE=$(du -h "$ARCHIVE_PATH" | cut -f1)
+        log_info "Archive created successfully (${SIZE})"
+    else
+        log_error "tar command failed. See $LOG_FILE for details."
+        exit 1
+    fi
 fi
 
 log_info "==== Backup run completed successfully ===="
