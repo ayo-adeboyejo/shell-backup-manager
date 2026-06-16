@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# backup.sh - config-driven backup script with retention-based cleanup
+# backup.sh - config-driven backup script with retention cleanup and email notifications
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -46,6 +46,24 @@ source "$CONFIG_FILE"
 LOG_DIR="${LOG_DIR:-${SCRIPT_DIR}/logs}"
 mkdir -p "$BACKUP_DEST" "$LOG_DIR"
 LOG_FILE="${LOG_DIR}/backup_$(date +%Y-%m-%d).log"
+
+# --- Prevent overlapping runs ---
+LOCK_FILE="${SCRIPT_DIR}/.backup.lock"
+exec 200>"$LOCK_FILE"
+if ! flock -n 200; then
+    log_error "Another instance is already running. Exiting."
+    exit 1
+fi
+
+# --- Cleanup / failure notification on exit ---
+cleanup() {
+    local exit_code=$?
+    if [[ $exit_code -ne 0 ]]; then
+        log_error "Backup script exited with errors (code $exit_code)."
+        notify "FAILURE" "Backup failed on $(hostname) at $(date). Check $LOG_FILE for details."
+    fi
+}
+trap cleanup EXIT
 
 log_info "==== Backup run started ===="
 [[ "$DRY_RUN" == true ]] && log_info "Running in DRY-RUN mode. No changes will be made."
@@ -104,3 +122,4 @@ else
 fi
 
 log_info "==== Backup run completed successfully ===="
+notify "SUCCESS" "Backup completed successfully on $(hostname) at $(date)."
