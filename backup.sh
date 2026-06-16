@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 #
-# backup.sh - config-driven backup script with retention cleanup and email notifications
+# backup.sh - Automated backup script with retention-based cleanup and email notifications
+#
+# Usage: ./backup.sh [-c config_file] [-n|--dry-run] [-h|--help]
+#
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${SCRIPT_DIR}/config/backup.conf"
 DRY_RUN=false
 
+# shellcheck source=lib/utils.sh
 source "${SCRIPT_DIR}/lib/utils.sh"
 
 usage() {
@@ -21,6 +25,7 @@ EOF
     exit 0
 }
 
+# --- Parse arguments ---
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -c|--config)
@@ -41,15 +46,28 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [[ ! -f "$CONFIG_FILE" ]]; then
+    echo "Config file not found: $CONFIG_FILE" >&2
+    exit 1
+fi
+
+# shellcheck source=/dev/null
 source "$CONFIG_FILE"
 
 LOG_DIR="${LOG_DIR:-${SCRIPT_DIR}/logs}"
-mkdir -p "$BACKUP_DEST" "$LOG_DIR"
+mkdir -p "$LOG_DIR" "$BACKUP_DEST"
 LOG_FILE="${LOG_DIR}/backup_$(date +%Y-%m-%d).log"
 
 # --- Prevent overlapping runs ---
-LOCK_FILE="${SCRIPT_DIR}/.backup.lock"
-exec 200>"$LOCK_FILE"
+# Scoped to both the current user and the backup destination, so:
+#   - two different users running this script never collide on one lock file
+#   - the same user running it against two different configs doesn't collide either
+LOCK_FILE="/tmp/shell-backup-manager_$(id -u)_$(basename "$BACKUP_DEST").lock"
+
+exec 200>"$LOCK_FILE" || {
+    log_error "Cannot open lock file: $LOCK_FILE. Check permissions or remove it manually."
+    exit 1
+}
 if ! flock -n 200; then
     log_error "Another instance is already running. Exiting."
     exit 1
@@ -69,7 +87,8 @@ log_info "==== Backup run started ===="
 [[ "$DRY_RUN" == true ]] && log_info "Running in DRY-RUN mode. No changes will be made."
 
 TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
-ARCHIVE_PATH="${BACKUP_DEST}/backup_${TIMESTAMP}.tar.gz"
+ARCHIVE_NAME="backup_${TIMESTAMP}.tar.gz"
+ARCHIVE_PATH="${BACKUP_DEST}/${ARCHIVE_NAME}"
 
 # --- Validate source directories ---
 VALID_SOURCES=()
