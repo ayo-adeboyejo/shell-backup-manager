@@ -7,7 +7,6 @@ A lightweight, cron-friendly Bash tool for automated backups with day-based rete
 ![Cron](https://img.shields.io/badge/Scheduling-cron-blue?style=flat)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-
 ## Problem Statement
 
 As a system administrator, backing up directories, log files, and configs is part of my day-to-day. I used to handle it the way most sysadmins start out — a quick cron job here, a one-off tar command there. It worked, until it didn't. Old archives piled up silently and ate disk space I only noticed when a server warned me it was nearly full. A failed backup once went unnoticed for weeks because nothing told me it had failed. And more than once I worried about two cron runs overlapping on a slow night, with no safeguard in place to stop it.
@@ -34,7 +33,7 @@ I built shell-backup-manager to fix that, for good. Instead of another one-off s
 
 1. Clone the repo:
 
-       git clone https://github.com/ayo-adeboyejo/shell-backup-manager.git
+       git clone https://github.com/yourusername/shell-backup-manager.git
        cd shell-backup-manager
 
 2. Make the script executable:
@@ -43,8 +42,8 @@ I built shell-backup-manager to fix that, for good. Instead of another one-off s
 
 3. Edit config/backup.conf with your own paths:
 
-       SOURCE_DIRS=("/home/user/documents" "/etc/myapp")
-       BACKUP_DEST="/var/backups/myapp"
+       SOURCE_DIRS=("/path/to/source/destination1" "/path/to/source/destination2") # Takes multiple directories, each one as a string.
+       BACKUP_DEST="/path/to/backup/destination"
        RETENTION_DAYS=7        # leave empty ("") to disable auto-deletion
        NOTIFY_EMAIL=""         # optional, requires 'mail' command
 
@@ -59,6 +58,29 @@ I built shell-backup-manager to fix that, for good. Instead of another one-off s
 6. (Optional) Schedule it nightly with cron:
 
        0 2 * * * /path/to/shell-backup-manager/backup.sh >> /path/to/shell-backup-manager/logs/cron.log 2>&1
+
+7. To restore files, extract the archive with tar. Paths are stored with the
+   leading `/` stripped, so `/home/user/documents` becomes
+   `home/user/documents/...` inside the archive.
+
+   List contents first (no extraction):
+
+       tar -tzf backup_2026-06-16_17-40-16.tar.gz
+
+   **Full path restore** — recreates `home/user/documents/...` under your
+   current directory:
+
+       mkdir -p ~/restore-test && cd ~/restore-test
+       tar -xzf /path/to/backup_2026-06-16_17-40-16.tar.gz
+
+   **Flat restore** — drop the leading path with `--strip-components=N`,
+   where N is the number of path segments to remove (3 for
+   `home/user/documents`):
+
+       tar -xzf backup_2026-06-16_17-40-16.tar.gz --strip-components=3
+
+   > Always extract into a directory you own. `Cannot mkdir` / `Cannot open`
+   > errors usually mean a permissions issue, not a corrupt archive.
 
 ## Folder Structure
 
