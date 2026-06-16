@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# backup.sh - config-driven backup script with dry-run support
+# backup.sh - config-driven backup script with retention-based cleanup
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -53,8 +53,7 @@ log_info "==== Backup run started ===="
 TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
 ARCHIVE_PATH="${BACKUP_DEST}/backup_${TIMESTAMP}.tar.gz"
 
-
-# loop through the sources to confirm their validity and save them in an array
+# --- Validate source directories ---
 VALID_SOURCES=()
 for src in "${SOURCE_DIRS[@]}"; do
     if [[ -e "$src" ]]; then
@@ -64,12 +63,12 @@ for src in "${SOURCE_DIRS[@]}"; do
     fi
 done
 
-# 
 if [[ ${#VALID_SOURCES[@]} -eq 0 ]]; then
     log_error "No valid source directories found. Aborting."
     exit 1
 fi
 
+# --- Create the archive ---
 log_info "Creating archive: $ARCHIVE_PATH"
 log_info "Sources: ${VALID_SOURCES[*]}"
 
@@ -83,6 +82,25 @@ else
         log_error "tar command failed. See $LOG_FILE for details."
         exit 1
     fi
+fi
+
+# --- Delete backups older than RETENTION_DAYS ---
+if [[ -z "${RETENTION_DAYS:-}" ]]; then
+    log_info "RETENTION_DAYS not set. Skipping cleanup of old backups."
+else
+    log_info "Checking for backups older than ${RETENTION_DAYS} day(s) in ${BACKUP_DEST}"
+
+    while IFS= read -r old_file; do
+        if [[ "$DRY_RUN" == true ]]; then
+            log_info "[DRY-RUN] Would delete old backup: $old_file"
+        else
+            if rm -f "$old_file"; then
+                log_info "Deleted old backup: $old_file"
+            else
+                log_warn "Failed to delete old backup: $old_file"
+            fi
+        fi
+    done < <(find "$BACKUP_DEST" -maxdepth 1 -type f -name 'backup_*.tar.gz' -mtime "+${RETENTION_DAYS}")
 fi
 
 log_info "==== Backup run completed successfully ===="
