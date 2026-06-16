@@ -33,7 +33,7 @@ I built shell-backup-manager to fix that, for good. Instead of another one-off s
 
 1. Clone the repo:
 
-       git clone https://github.com/yourusername/shell-backup-manager.git
+       git clone https://github.com/ayo-adeboyejo/shell-backup-manager.git
        cd shell-backup-manager
 
 2. Make the script executable:
@@ -97,6 +97,7 @@ I built shell-backup-manager to fix that, for good. Instead of another one-off s
 - stdout vs. stderr — routing log_warn/log_error to stderr (via >&2) while keeping log_info on stdout took some thought, but it matters for cron: cron's default mail-on-error behavior is triggered by stderr output, so keeping that separation meant failures could be caught two ways (the script's own notify() and cron's built-in alerting).
 - Preventing overlapping runs — added flock on a lock file after realizing a slow backup (e.g., a large directory) could overlap with the next scheduled cron run and corrupt an in-progress archive.
 - Sourcing vs. executing — using source to pull in lib/utils.sh rather than running it as a separate script was key to letting helper functions share state (like $LOG_FILE) with the main script without passing everything explicitly.
+- Lock file ownership — testing as different users (with and without sudo) hit a "Permission denied" error, since a file created by root can't be written to by another user afterward. Chmod-ing around it still depended on the file's owner cooperating, so the real fix was to make collisions impossible: move the lock file to /tmp and bake the user ID (id -u) into its filename, so every user gets their own lock file by design.
 
 ## Contact
 
